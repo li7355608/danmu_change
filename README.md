@@ -55,8 +55,14 @@ setting,user,content
 ```
 danmu_change/
 ├── ChangeXmlToCsv.py    # 转换脚本
+├── change.bat           # 批处理脚本
 └── README.md            # 项目说明
+
 ```
+
+## 更新日志
+- 1.0：初始版本发布
+- 1.1：添加批处理脚本，开箱即用
   
 ## 注意事项
 本工具目前**仅支持**转换**标准弹幕**数据，**不支持**舰长记录、礼物记录、SC留言。  
