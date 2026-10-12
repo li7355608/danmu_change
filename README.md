@@ -4,50 +4,65 @@
 
 ## 功能特性
 
-- 将 XML 文件中的 `<d>` 标签解析为 CSV 文件
-- 支持提取以下字段：
-  - `setting`（对应 XML 中的 `p` 属性）
-  - `user`（对应 XML 中的 `user` 属性）
-  - `content`（对应 `<d>` 标签的文本内容）
+- 流式解析 XML（`xml.etree.ElementTree.iterparse`），大文件也不会占用过多内存
+- 将 XML 中根元素下的每个 `<d>` 标签解析为 CSV 中的一行，自动跳过录播姬内嵌的 XSL 样式
+- 提取以下字段（CSV 共 10 列）：
+
+| CSV 列名 | 来源 | 含义 |
+|---|---|---|
+| `time` | `p` 第 1 段 | 弹幕出现时间（秒，相对录制开始） |
+| `mode` | `p` 第 2 段 | 弹幕模式（1-3 滚动、4 底端、5 顶端、6 逆向、7 定位、8 高级） |
+| `fontsize` | `p` 第 3 段 | 字号 |
+| `color` | `p` 第 4 段 | 颜色（十进制整数） |
+| `send_ts` | `p` 第 5 段 | 发送时间戳（Unix 毫秒） |
+| `pool` | `p` 第 6 段 | 弹幕池（0 为普通池） |
+| `uid` | `p` 第 7 段 | 用户 UID |
+| `dbid` | `p` 第 8 段 | 弹幕数据库 ID（0 表示无） |
+| `user` | `user` 属性 | 用户名 |
+| `content` | `<d>` 文本 | 弹幕内容 |
+
+> `p` 属性第 9 段为保护/保留位，无分析价值，转换时丢弃；`p` 属性缺失或段数不足时对应列留空，不会导致转换失败。
 
 ## 使用方法
 
 ### 运行环境
 
-- Python 3.x
+- Python 3.7+
 
 ### 依赖库
 
-无需额外安装，标准库支持：
-- `xml.etree.ElementTree`
-- `csv`
-- `os`
-- `sys`
+无需额外安装，仅使用标准库。
 
 ### 执行转换
 
 ```bash
+# 单文件转换（输出到同目录同名 .csv）
 python ChangeXmlToCsv.py input.xml
-```
 
-- `input.xml` 是你的弹幕 XML 文件。
-- 转换后的 CSV 文件将保存在同一目录下，文件名为你的文件名，如 `input.csv`。
+# 指定输出路径（仅单文件时可用）
+python ChangeXmlToCsv.py input.xml -o output.csv
+
+# 多文件批量转换（各文件分别输出同名 .csv）
+python ChangeXmlToCsv.py a.xml b.xml c.xml
+```
 
 ### 示例
 
-输入 XML 内容示例：
+输入 XML 内容示例（格式与真实文件一致，数据已脱敏）：
+
 ```xml
-<root>
-    <d p="1" user="叔叔">你所热爱的就是你的生活</d>
-    <d p="2" user="蒙古上单">你*什么时候*啊</d>
-</root>
+<i>
+  <d p="0.562,1,25,16777215,1700000000000,0,10001,0" user="示例用户A">这是一条测试弹幕</d>
+  <d p="1.712,1,25,16777215,1700000000938,0,10002,0" user="示例用户B">你好世界</d>
+</i>
 ```
 
 输出 CSV 文件内容：
+
 ```
-setting,user,content
-1,叔叔,你所热爱的就是你的生活
-2,蒙古上单,你*什么时候*啊
+time,mode,fontsize,color,send_ts,pool,uid,dbid,user,content
+0.562,1,25,16777215,1700000000000,0,10001,0,示例用户A,这是一条测试弹幕
+1.712,1,25,16777215,1700000000938,0,10002,0,示例用户B,你好世界
 ```
 
 ## 项目结构
@@ -55,17 +70,17 @@ setting,user,content
 ```
 danmu_change/
 ├── ChangeXmlToCsv.py    # 转换脚本
-├── change.bat           # 批处理脚本
-├── input.xml            # 示例 XML 文件
+├── danmu.xml            # 真实弹幕数据文件（录播姬导出格式）
+├── input.xml            # 精简示例 XML 文件
 └── README.md            # 项目说明
-
 ```
 
 ## 更新日志
 - 1.0：初始版本发布
 - 1.1：添加批处理脚本，开箱即用
 - 1.2：添加示例文件
-  
+- 1.3：`p` 属性拆分为独立 CSV 列（time/mode/fontsize/color/send_ts/pool/uid/dbid）；改为流式解析以支持大文件；支持多文件转换与 `-o` 参数；完善容错处理
+
 ## 注意事项
 本工具目前**仅支持**转换**标准弹幕**数据，**不支持**舰长记录、礼物记录、SC留言。  
 如需支持更多字段或格式转换，可继续扩展此工具。欢迎提交 issue 或 PR！

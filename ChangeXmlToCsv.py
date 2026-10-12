@@ -1,41 +1,82 @@
-import sys
-import xml.etree.ElementTree as ET
+import argparse
 import csv
 import os
+import sys
+import xml.etree.ElementTree as ET
 
-def parse_xml(input_file):
-    # 生成输出文件名
-    base_name = os.path.splitext(input_file)[0]
-    output_file = f"{base_name}.csv"
+P_FIELDNAMES = ['time', 'mode', 'fontsize', 'color', 'send_ts', 'pool', 'uid', 'dbid']
+CSV_FIELDNAMES = P_FIELDNAMES + ['user', 'content']
 
-    # 解析 XML 文件
-    tree = ET.parse(input_file)
-    root = tree.getroot()
 
-    # 打开 CSV 文件以写入解析后的数据
+def parse_p(p_value):
+    row = dict.fromkeys(P_FIELDNAMES, '')
+    if p_value:
+        for key, value in zip(P_FIELDNAMES, p_value.split(',')):
+            row[key] = value
+    return row
+
+
+def convert_xml_to_csv(input_file, output_file):
+    count = 0
+    stack = []
     with open(output_file, 'w', newline='', encoding='utf-8') as csvfile:
-        fieldnames = ['setting', 'user', 'content']
-        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-
+        writer = csv.DictWriter(csvfile, fieldnames=CSV_FIELDNAMES)
         writer.writeheader()
+        for event, elem in ET.iterparse(input_file, events=('start', 'end')):
+            if event == 'start':
+                stack.append(elem)
+                continue
+            stack.pop()
+            if len(stack) != 1 or elem.tag != 'd':
+                continue
+            row = parse_p(elem.get('p'))
+            row['user'] = elem.get('user') or ''
+            row['content'] = elem.text or ''
+            writer.writerow(row)
+            count += 1
+            elem.clear()
+            stack[0].remove(elem)
+    return count
 
-        # 遍历 XML 中的每个 <d> 元素
-        for elem in root.findall('d'):
-            p = elem.get('p')
-            user = elem.get('user')
-            content = elem.text
 
-            # 写入 CSV 文件
-            writer.writerow({'setting': p, 'user': user, 'content': content})
+def build_output_path(input_file, output_override):
+    if output_override:
+        return output_override
+    return os.path.splitext(input_file)[0] + '.csv'
 
-    print(f"数据已成功解析并写入到 {output_file} 文件中。")
 
-if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("用法: python parse_xml.py <输入文件>")
-    else:
-        input_file = sys.argv[1]
+def main(argv=None):
+    parser = argparse.ArgumentParser(
+        description='将B站录播姬弹幕XML文件转换为CSV格式')
+    parser.add_argument('files', nargs='+', help='待转换的弹幕XML文件路径（支持多个）')
+    parser.add_argument('-o', '--output',
+                        help='输出CSV文件路径（仅转换单个文件时有效）')
+    args = parser.parse_args(argv)
+
+    if args.output and len(args.files) > 1:
+        parser.error('-o/--output 仅在转换单个文件时可用')
+
+    failed = 0
+    for input_file in args.files:
         if not os.path.exists(input_file):
-            print("文件不存在。")
-        else:
-            parse_xml(input_file)
+            print(f'文件不存在: {input_file}', file=sys.stderr)
+            failed += 1
+            continue
+        try:
+            output_file = build_output_path(input_file, args.output)
+            count = convert_xml_to_csv(input_file, output_file)
+        except ET.ParseError as exc:
+            print(f'XML解析失败 ({input_file}): {exc}', file=sys.stderr)
+            failed += 1
+            continue
+        except OSError as exc:
+            print(f'文件读写失败 ({input_file}): {exc}', file=sys.stderr)
+            failed += 1
+            continue
+        print(f'{input_file}: 转换 {count} 条弹幕，已写入 {output_file}')
+
+    return 1 if failed else 0
+
+
+if __name__ == '__main__':
+    sys.exit(main())
